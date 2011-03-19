@@ -1,0 +1,61 @@
+wlmproxy: An advanced proxy for the MSN Messenger protocol
+==========================================================
+
+Homepage: https://github.com/poetinha/wlmproxy
+
+wlmproxy is a transparent proxy server for the MSN protocol.
+It supports all versions of MSNP, from 8 up to 21.
+
+Copyright
+---------
+ (C) 2011 William Lima <wlima@primate.com.br>
+
+License
+-------
+
+See the file LICENSE.
+
+Features
+--------
+ - Access control lists (ACLs)
+   The wildcard character * (asterisk) can be used as part of a user identifier
+ - Wordfilter with regular expressions
+ - Client version control
+ - Conversation history
+ - Automatic user registration
+ - Group-based rules
+ - Contact management and presence information
+ - Disclaimer message
+ - Policy enforcement notification
+
+Limitations
+-----------
+ - no support for P2P
+ - no web UI (yet)
+
+P2P is in pre-alpha stage. Let me know if you're interested.
+
+Build Requirements
+------------------
+
+ Boost C++ library
+ Dolphin Connector >= 1.1
+ OpenSSL
+ Libevent >= 1.4.13
+
+Building from git
+-----------------
+
+$ make
+
+Running
+-------
+
+$ mysql -u root -p
+> CREATE DATABASE wlmproxy;
+> CREATE USER 'joe'@'localhost' IDENTIFIED BY 'doe';
+> GRANT SELECT,INSERT,UPDATE,EXECUTE ON wlmproxy.* TO 'joe'@'localhost;
+
+$ mysql -D wlmproxy -u root -p < create_mysql.sql
+
+$ ./wlmproxy -v

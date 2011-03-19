@@ -1,0 +1,15 @@
+{
+   # http://bugs.mysql.com/bug.php?id=45630
+   Mem loss inside nptl_pthread_exit_hack_handler
+   Memcheck:Leak
+   fun:malloc
+   ...
+   fun:__libc_dlopen_mode
+   fun:pthread_cancel_init
+   fun:_Unwind_ForcedUnwind
+   fun:__pthread_unwind
+   fun:pthread_exit
+   fun:nptl_pthread_exit_hack_handler
+   fun:start_thread
+   fun:clone
+}
