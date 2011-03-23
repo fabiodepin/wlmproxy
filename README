@@ -54,7 +54,7 @@ Running
 $ mysql -u root -p
 > CREATE DATABASE wlmproxy;
 > CREATE USER 'joe'@'localhost' IDENTIFIED BY 'doe';
-> GRANT SELECT,INSERT,UPDATE,EXECUTE ON wlmproxy.* TO 'joe'@'localhost;
+> GRANT SELECT,INSERT,UPDATE,EXECUTE ON wlmproxy.* TO 'joe'@'localhost';
 
 $ mysql -D wlmproxy -u root -p < create_mysql.sql
 
