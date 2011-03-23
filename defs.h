@@ -9,7 +9,7 @@
 #pragma once
 
 #include <endian.h>
-#include <bits/byteswap.h>
+#include <byteswap.h>
 
 #define SET_BIT(bit)    (1U << (bit))
 #define SET_BIT_32(bit) (UINT32_C(1) << (bit))
