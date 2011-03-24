@@ -1235,18 +1235,15 @@ int parse_packet(bool inbound, struct evbuffer* input, Connection* conn) {
       return -1;
     }
 
-    char* cp = NULL;
-    char* line = cp = strndup(buf, linebreak - buf);
+    const std::string line(buf, linebreak - buf);
 
-    DLOG(1, "%c: %u: %s", inbound ? 'S' : 'C', conn->id, line);
+    DLOG(1, "%c: %u: %s", inbound ? 'S' : 'C', conn->id, line.c_str());
 
     const size_t line_len = linebreak - buf + 2;
 
-    char* tok = NULL;
-    while ((tok = strsep(&cp, " ")) != NULL)
-      cmd->args.push_back(tok);
-
-    free(line);
+    tokenizer<> t(line, " ");
+    while (t.has_next())
+      cmd->args.push_back(t.token());
 
     if (cmd->args.size() > 1) {
       cmd->trid = isdigit(cmd->args[1][0]) ? atoi(cmd->args[1].c_str()) : 0;
