@@ -28,7 +28,6 @@
 #include "acl.h"
 #include "word_filter.h"
 #include "tokenizer.h"
-#include "compat.h"
 #include "defs.h"
 #include "utils.h"
 #include "log.h"

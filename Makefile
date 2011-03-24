@@ -13,7 +13,6 @@ PROG = wlmproxy
 
 SRC_DIRS = \
 	. \
-	compat \
 	history \
 	msn \
 	thread
