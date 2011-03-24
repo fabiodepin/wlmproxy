@@ -2,4 +2,5 @@
 /tags
 wlmproxy
 valgrind-*.log
+callgrind.out.*
 .*.swp
