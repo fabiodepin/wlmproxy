@@ -38,7 +38,8 @@
 namespace rapidxml {
 
 void parse_error_handler(const char* what, void* where) {
-  exit(1);  // FIXME: not quit immediately (show error message).
+  log_warn("rapidxml::parse_error: %s", what);
+  exit(1);
 }
 
 } // namespace rapidxml
