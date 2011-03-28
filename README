@@ -59,3 +59,8 @@ $ mysql -u root -p
 $ mysql -D wlmproxy -u root -p < create_mysql.sql
 
 $ ./wlmproxy -v
+
+IRC
+---
+
+#wlmproxy on chat.freenode.net
