@@ -1,7 +1,7 @@
 wlmproxy: An advanced proxy for the MSN Messenger protocol
 ==========================================================
 
-Homepage: https://github.com/poetinha/wlmproxy
+Homepage: http://wlmproxy.org/
 
 wlmproxy is a transparent proxy server for the MSN protocol.
 It supports all versions of MSNP, from 8 up to 21.
