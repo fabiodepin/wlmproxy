@@ -810,15 +810,14 @@ static void nfy_cmd(Command* cmd) {
   if (cmd->payload.empty())
     return;
 
-  size_t idx = cmd->payload.find_last_of("\r\n\r\n");
-  std::string mime = cmd->payload.substr(0, idx + 1);
-  mime.replace(mime.find("\r\n\r\n"), 4, "\r\n");
-  string_map header_map = parse_headers(mime);
+  size_t routing_end_pos = cmd->payload.find("\r\n\r\n");
+  std::string mime = cmd->payload.substr(0, routing_end_pos);
+  string_map routing_headers = parse_headers(mime);
 
-  if (header_map["Content-Type"] != "application/user+xml")
+  std::string buddy = routing_headers["From"];
+  if (buddy.empty())
     return;
 
-  std::string buddy = header_map["From"];
   size_t pos = buddy.find_first_of(':');  // strip off the ':'
   // TODO: verify this, and/or implement correct parsing to handle
   // contact types.
@@ -828,11 +827,23 @@ static void nfy_cmd(Command* cmd) {
   if (buddy == sess->user)
     return;
 
+  size_t reliability_end_pos = cmd->payload.find("\r\n\r\n",
+                                                 routing_end_pos + 4);
+
+  size_t content_end_pos = cmd->payload.find("\r\n\r\n",
+                                             reliability_end_pos + 4);
+  mime = cmd->payload.substr(
+      reliability_end_pos + 4, content_end_pos - (reliability_end_pos + 4));
+  string_map content_headers = parse_headers(mime);
+
+  if (content_headers["Content-Type"] != "application/user+xml")
+    return;
+
   if (cmd->args[1] == "PUT") {
-    size_t len = cmd->payload.length() - idx - 1;
+    size_t len = cmd->payload.length() - content_end_pos - 4;
     boost::scoped_array<char> buffer(new char[len + 1]);
     buffer[len] = '\0';
-    memcpy(buffer.get(), cmd->payload.data() + idx + 1, len);
+    memcpy(buffer.get(), cmd->payload.data() + content_end_pos + 4, len);
 
     rapidxml::xml_document<char> doc;
     doc.parse<0>(buffer.get());
@@ -874,18 +885,24 @@ static void put_cmd(Command* cmd) {
   SessionPointer sess = cmd->conn->session;
 
   if (!cmd->is_inbound()) {
-    size_t idx = cmd->payload.find_last_of("\r\n\r\n");
-    std::string mime = cmd->payload.substr(0, idx + 1);
-    mime.replace(mime.find("\r\n\r\n"), 4, "\r\n");
-    string_map header_map = parse_headers(mime);
+    size_t routing_end_pos = cmd->payload.find("\r\n\r\n");
 
-    if (header_map["Content-Type"] != "application/user+xml")
+    size_t reliability_end_pos = cmd->payload.find("\r\n\r\n",
+                                                   routing_end_pos + 4);
+
+    size_t content_end_pos = cmd->payload.find("\r\n\r\n",
+                                               reliability_end_pos + 4);
+    std::string mime = cmd->payload.substr(
+        reliability_end_pos + 4, content_end_pos - (reliability_end_pos + 4));
+    string_map content_headers = parse_headers(mime);
+
+    if (content_headers["Content-Type"] != "application/user+xml")
       return;
 
-    size_t len = cmd->payload.length() - idx - 1;
+    size_t len = cmd->payload.length() - content_end_pos - 4;
     boost::scoped_array<char> buffer(new char[len + 1]);
     buffer[len] = '\0';
-    memcpy(buffer.get(), cmd->payload.data() + idx + 1, len);
+    memcpy(buffer.get(), cmd->payload.data() + content_end_pos + 4, len);
 
     rapidxml::xml_document<char> doc;
     doc.parse<0>(buffer.get());
@@ -921,21 +938,27 @@ static void put_cmd(Command* cmd) {
   }
 }
 
-// FIXME: Fix this function to properly deal with multiple mime messages.
 static void sdg_cmd(Command* cmd) {
   const std::string& msg = cmd->payload;
 
-  size_t index = msg.rfind("\r\n\r\n");
-  std::string mime = msg.substr(0, index + 4);
-  mime.replace(mime.find("\r\n\r\n"), 4, "\r\n");
-  string_map header_map = parse_headers(mime);
+  size_t routing_end_pos = msg.find("\r\n\r\n");
 
-  std::string message_type = header_map["Message-Type"];
+  size_t reliability_end_pos = msg.find("\r\n\r\n", routing_end_pos + 4);
+
+  size_t content_end_pos = msg.find("\r\n\r\n", reliability_end_pos + 4);
+
+  std::string mime = msg.substr(
+      reliability_end_pos + 4, content_end_pos - (reliability_end_pos + 4));
+  string_map content_headers = parse_headers(mime);
+
+  mime = msg.substr(0, routing_end_pos);
+
+  std::string message_type = content_headers["Message-Type"];
 
   std::string body;
-  const int n = msg.size() - index - 4;
+  const int n = msg.size() - content_end_pos - 4;
   if (n > 0)
-    body = msg.substr(index + 4);
+    body = msg.substr(content_end_pos + 4);
 
   const msg_map::const_iterator it = messages.find(message_type);
   if (it != messages.end())
@@ -1037,10 +1060,10 @@ static void invite_msg(Command* cmd, const std::string& mime,
                        const std::string& body) {
   // TODO implement this properly.
   string_map header_map;
-  if (body.empty())
-    header_map = parse_headers(mime);
-  else
+  if (body.length())
     header_map = parse_headers(body);
+  else
+    header_map = parse_headers(mime);
 
   const std::string& command = header_map["Invitation-Command"];
   if (command == "INVITE") {
