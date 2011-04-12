@@ -2,6 +2,6 @@
 #define VERSION_H_
 #pragma once
 
-#define VERSION "0.1"
+#define VERSION "0.1.1"
 
 #endif  // VERSION_H_
