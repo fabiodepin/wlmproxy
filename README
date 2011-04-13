@@ -60,6 +60,8 @@ $ mysql -D wlmproxy -u root -p < create_mysql.sql
 
 $ ./wlmproxy -v
 
+Then add a rule to redirect MSN traffic through the proxy.
+
 IRC
 ---
 
