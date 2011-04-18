@@ -1,0 +1,6 @@
+Changes in 0.1.2 (17 Apr 2011):
+ * Replace the XML parser. (0ab8c64)
+
+Changes in 0.1.1 (11 Apr 2011):
+ * Add SysV initscript. (c603034)
+ * Fix multiple mime messages handling (closes #4). (60bd134)
