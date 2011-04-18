@@ -21,6 +21,7 @@
 #include <set>
 
 #include <openssl/crypto.h>
+#include <libxml/parser.h>
 #include <event.h>
 
 #include "connection.h"
@@ -256,6 +257,7 @@ int main(int argc, char** argv) {
 
   // Make valgrind happy
   CRYPTO_cleanup_all_ex_data();
+  xmlCleanupParser();
 
   if (pid_file)
     unlink(pid_file);

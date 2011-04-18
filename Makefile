@@ -5,9 +5,9 @@ DEFS = -DDEBUG
 INCLUDES = \
 	-I. \
 	-I/usr/include/mysql \
-	-Ithird_party/rapidxml
+	-I/usr/include/libxml2
 #LDFLAGS = -Wl,-s
-LIBS = -levent -lpthread -lcrypto -lboost_regex -ldolphinconn
+LIBS = -levent -lpthread -lcrypto -lboost_regex -ldolphinconn -lxml2
 
 PROG = wlmproxy
 

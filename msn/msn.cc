@@ -16,8 +16,8 @@
 #include <string>
 #include <vector>
 
-#include <boost/scoped_array.hpp>
 #include <boost/lexical_cast.hpp>
+#include <libxml/parser.h>
 #include <event.h>
 
 #include "connection.h"
@@ -31,18 +31,6 @@
 #include "defs.h"
 #include "utils.h"
 #include "log.h"
-
-#define RAPIDXML_NO_EXCEPTIONS
-#include "rapidxml.hpp"
-
-namespace rapidxml {
-
-void parse_error_handler(const char* what, void* where) {
-  log_warn("rapidxml::parse_error: %s", what);
-  exit(1);
-}
-
-} // namespace rapidxml
 
 using boost::lexical_cast;
 
@@ -691,37 +679,76 @@ static void adl_cmd(Command* cmd) {
   SessionPointer sess = cmd->conn->session;
 
   if (cmd->payload.size() > 0) {
-    boost::scoped_array<char> buffer(new char[cmd->payload.size() + 1]);
-    memcpy(buffer.get(), cmd->payload.c_str(), cmd->payload.size() + 1);
+    const std::string& data = cmd->payload;
+    int data_size = static_cast<int>(data.size());
 
-    rapidxml::xml_document<char> doc;
-    doc.parse<0>(buffer.get());
+    xmlDocPtr doc = xmlReadMemory(data.c_str(), data_size, "", NULL, 0);
+    if (!doc) {
+      log_warn("Document not parsed successfully.");
+      return;
+    }
 
-    rapidxml::xml_node<char>* adl = doc.first_node();
+    xmlNodePtr adl = xmlDocGetRootElement(doc);
+    if (!adl) {
+      log_warn("empty document");
+      xmlFreeDoc(doc);
+      return;
+    }
+
     std::string email;
 
-    for (rapidxml::xml_node<char>* domain = adl->first_node("d");
-         domain != NULL;
-         domain = domain->next_sibling("d")) {
-      const char* domain_name = domain->first_attribute("n")->value();
-      for (rapidxml::xml_node<char>* contact = domain->first_node("c");
-           contact != NULL;
-           contact = contact->next_sibling("c")) {
-        const char* contact_name = contact->first_attribute("n")->value();
-        int type = strtol(contact->first_attribute("t")->value(), NULL, 10);
-        if (type == 9 || type == 32)
+    for (xmlNodePtr domain = adl->children; domain; domain = domain->next) {
+      if (xmlStrEqual(domain->name, reinterpret_cast<const xmlChar*>("d"))) {
+        xmlChar* domain_name = xmlGetProp(
+            domain,
+            reinterpret_cast<const xmlChar*>("n"));
+        if (!domain_name)
           continue;
 
-        // TODO: do something better
-        email = contact_name;
-        email += "@";
-        email += domain_name;
+        for (xmlNodePtr contact = domain->children;
+             contact;
+             contact = contact->next) {
+          if (xmlStrEqual(contact->name,
+                          reinterpret_cast<const xmlChar*>("c"))) {
+            xmlChar* contact_name = xmlGetProp(
+                contact,
+                reinterpret_cast<const xmlChar*>("n"));
+            if (!contact_name)
+              continue;
 
-        // NOTE: Wave 4 keeps the user as a contact.
-        if (email != sess->user)
-          db.add_buddy(sess->user, email);
+            xmlChar* type_val = xmlGetProp(
+                contact,
+                reinterpret_cast<const xmlChar*>("t"));
+            if (!type_val) {
+              xmlFree(contact_name);
+              continue;
+            }
+
+            int type = strtol(reinterpret_cast<char*>(type_val), NULL, 10);
+            if (type == 9 || type == 32) {
+              xmlFree(contact_name);
+              xmlFree(type_val);
+              continue;
+            }
+
+            // TODO: do something better
+            email = reinterpret_cast<char*>(contact_name);
+            email += "@";
+            email += reinterpret_cast<char*>(domain_name);
+
+            xmlFree(contact_name);
+            xmlFree(type_val);
+
+            // NOTE: Wave 4 keeps the user as a contact.
+            if (email != sess->user)
+              db.add_buddy(sess->user, email);
+          }
+        }
+        xmlFree(domain_name);
       }
     }
+
+    xmlFreeDoc(doc);
   }
 }
 
@@ -768,19 +795,41 @@ static void ubx_cmd(Command* cmd) {
     if (buddy == sess->user)
       return;
 
-    boost::scoped_array<char> buffer(new char[cmd->payload.size() + 1]);
-    memcpy(buffer.get(), cmd->payload.c_str(), cmd->payload.size() + 1);
+    const std::string& data = cmd->payload;
+    int data_size = static_cast<int>(data.size());
 
-    rapidxml::xml_document<char> doc;
-    doc.parse<0>(buffer.get());
-
-    rapidxml::xml_node<char>* payload_node = doc.first_node();
-
-    rapidxml::xml_node<char>* psm_node = payload_node->first_node("PSM");
-    if (psm_node) {
-      const char* psm = psm_node->value();
-      db.set_buddy_status_message(sess->user, buddy, psm);
+    xmlDocPtr doc = xmlReadMemory(data.c_str(), data_size, "", NULL, 0);
+    if (!doc) {
+      log_warn("Document not parsed successfully.");
+      return;
     }
+
+    xmlNodePtr payload_node = xmlDocGetRootElement(doc), psm_node = NULL;
+    if (!payload_node) {
+      log_warn("empty document");
+      xmlFreeDoc(doc);
+      return;
+    }
+
+    for (xmlNodePtr current_node = payload_node->children;
+         current_node;
+         current_node = current_node->next) {
+      if (xmlStrEqual(current_node->name,
+                      reinterpret_cast<const xmlChar*>("PSM"))) {
+        psm_node = current_node;
+        break;
+      }
+    }
+
+    if (psm_node) {
+      xmlChar* psm = xmlNodeListGetString(doc, psm_node->children, 1);
+      db.set_buddy_status_message(sess->user, buddy,
+                                  reinterpret_cast<char*>(psm));
+      if (psm)
+        xmlFree(psm);
+    }
+
+    xmlFreeDoc(doc);
   }
 }
 
@@ -788,19 +837,40 @@ static void uux_cmd(Command* cmd) {
   SessionPointer sess = cmd->conn->session;
 
   if (!cmd->is_inbound()) {
-    boost::scoped_array<char> buffer(new char[cmd->payload.size() + 1]);
-    memcpy(buffer.get(), cmd->payload.c_str(), cmd->payload.size() + 1);
+    const std::string& data = cmd->payload;
+    int data_size = static_cast<int>(data.size());
 
-    rapidxml::xml_document<char> doc;
-    doc.parse<0>(buffer.get());
-
-    rapidxml::xml_node<char>* payload_node = doc.first_node();
-
-    rapidxml::xml_node<char>* psm_node = payload_node->first_node("PSM");
-    if (psm_node) {
-      const char* psm = psm_node->value();
-      db.set_status_message(sess->user, psm);
+    xmlDocPtr doc = xmlReadMemory(data.c_str(), data_size, "", NULL, 0);
+    if (!doc) {
+      log_warn("Document not parsed successfully.");
+      return;
     }
+
+    xmlNodePtr payload_node = xmlDocGetRootElement(doc), psm_node = NULL;
+    if (!payload_node) {
+      log_warn("empty document");
+      xmlFreeDoc(doc);
+      return;
+    }
+
+    for (xmlNodePtr current_node = payload_node->children;
+         current_node;
+         current_node = current_node->next) {
+      if (xmlStrEqual(current_node->name,
+                      reinterpret_cast<const xmlChar*>("PSM"))) {
+        psm_node = current_node;
+        break;
+      }
+    }
+
+    if (psm_node) {
+      xmlChar* psm = xmlNodeListGetString(doc, psm_node->children, 1);
+      db.set_status_message(sess->user, reinterpret_cast<char*>(psm));
+      if (psm)
+        xmlFree(psm);
+    }
+
+    xmlFreeDoc(doc);
   }
 }
 
@@ -840,42 +910,72 @@ static void nfy_cmd(Command* cmd) {
     return;
 
   if (cmd->args[1] == "PUT") {
-    size_t len = cmd->payload.length() - content_end_pos - 4;
-    boost::scoped_array<char> buffer(new char[len + 1]);
-    buffer[len] = '\0';
-    memcpy(buffer.get(), cmd->payload.data() + content_end_pos + 4, len);
+    const char* data = cmd->payload.data() + content_end_pos + 4;
+    int data_size =
+        static_cast<int>(cmd->payload.length() - content_end_pos) - 4;
 
-    rapidxml::xml_document<char> doc;
-    doc.parse<0>(buffer.get());
+    xmlDocPtr doc = xmlReadMemory(data, data_size, "", NULL, 0);
+    if (!doc) {
+      log_warn("Document not parsed successfully.");
+      return;
+    }
 
-    rapidxml::xml_node<char>* user_node = doc.first_node();
+    xmlNodePtr user_node = xmlDocGetRootElement(doc);
+    if (!user_node) {
+      log_warn("empty document");
+      xmlFreeDoc(doc);
+      return;
+    }
 
-    rapidxml::xml_node<char>* s_node = user_node->first_node("s");
-    while (s_node) {
-      const char* attr = s_node->first_attribute("n")->value();
-      if (strcmp(attr, "IM") == 0) {
-        rapidxml::xml_node<char>* status_node = s_node->first_node("Status");
-        if (status_node) {
-          // TODO: avoid copy.
-          const std::string status = status_node->value();
-          db.update_buddy_status(sess->user, buddy, status);
-        }
-      } else if (strcmp(attr, "PE") == 0) {
-        rapidxml::xml_node<char>* display_name_node = s_node->first_node("FriendlyName");
-        if (display_name_node) {
-          // TODO: avoid copy.
-          const std::string display_name = display_name_node->value();
-          db.set_buddy_friendly_name(sess->user, buddy, utils::decode_url(display_name));
-        }
+    xmlNodePtr current_node = user_node->children, s_node = NULL;
+    while (current_node) {
+      if (xmlStrEqual(current_node->name,
+                      reinterpret_cast<const xmlChar*>("s"))) {
+        s_node = current_node->children;
+        while (s_node) {
+          if (xmlStrEqual(s_node->name,
+                          reinterpret_cast<const xmlChar*>("Status"))) {
+            xmlChar* status_val =
+                xmlNodeListGetString(doc, s_node->children, 1);
+            if (status_val) {
+              // TODO: avoid copy.
+              const std::string status = reinterpret_cast<char*>(status_val);
 
-        rapidxml::xml_node<char>* psm_node = s_node->first_node("PSM");
-        if (psm_node) {
-          const char* psm = psm_node->value();
-          db.set_buddy_status_message(sess->user, buddy, psm);
+              xmlFree(status_val);
+
+              db.update_buddy_status(sess->user, buddy, status);
+            }
+          } else if (xmlStrEqual(s_node->name,
+                                 reinterpret_cast<const xmlChar*>
+                                     ("FriendlyName"))) {
+            xmlChar* display_name_val =
+                xmlNodeListGetString(doc, s_node->children, 1);
+            if (display_name_val) {
+              // TODO: avoid copy.
+              const std::string display_name =
+                  reinterpret_cast<char*>(display_name_val);
+
+              xmlFree(display_name_val);
+
+              db.set_buddy_friendly_name(sess->user, buddy,
+                                         utils::decode_url(display_name));
+            }
+          } else if (xmlStrEqual(s_node->name,
+                                 reinterpret_cast<const xmlChar*>("PSM"))) {
+            xmlChar* psm = xmlNodeListGetString(doc, s_node->children, 1);
+            db.set_buddy_status_message(sess->user, buddy,
+                                        reinterpret_cast<char*>(psm));
+            if (psm)
+              xmlFree(psm);
+          }
+
+          s_node = s_node->next;
         }
       }
-      s_node = s_node->next_sibling("s");
+      current_node = current_node->next;
     }
+
+    xmlFreeDoc(doc);
   } else if (cmd->args[1] == "DEL") {
     db.buddy_logoff(sess->user, buddy);
   }
@@ -899,42 +999,70 @@ static void put_cmd(Command* cmd) {
     if (content_headers["Content-Type"] != "application/user+xml")
       return;
 
-    size_t len = cmd->payload.length() - content_end_pos - 4;
-    boost::scoped_array<char> buffer(new char[len + 1]);
-    buffer[len] = '\0';
-    memcpy(buffer.get(), cmd->payload.data() + content_end_pos + 4, len);
+    const char* data = cmd->payload.data() + content_end_pos + 4;
+    int data_size =
+        static_cast<int>(cmd->payload.length() - content_end_pos) - 4;
 
-    rapidxml::xml_document<char> doc;
-    doc.parse<0>(buffer.get());
+    xmlDocPtr doc = xmlReadMemory(data, data_size, "", NULL, 0);
+    if (!doc) {
+      log_warn("Document not parsed successfully.");
+      return;
+    }
 
-    rapidxml::xml_node<char>* user_node = doc.first_node();
+    xmlNodePtr user_node = xmlDocGetRootElement(doc);
+    if (!user_node) {
+      log_warn("empty document");
+      xmlFreeDoc(doc);
+      return;
+    }
 
-    rapidxml::xml_node<char>* s_node = user_node->first_node("s");
-    while (s_node) {
-      const char* attr = s_node->first_attribute("n")->value();
-      if (strcmp(attr, "IM") == 0) {
-        rapidxml::xml_node<char>* status_node = s_node->first_node("Status");
-        if (status_node) {
-          // TODO: avoid copy.
-          const std::string status = status_node->value();
-          db.set_status(sess->user, status);
-        }
-      } else if (strcmp(attr, "PE") == 0) {
-        rapidxml::xml_node<char>* display_name_node = s_node->first_node("FriendlyName");
-        if (display_name_node) {
-          // TODO: avoid copy.
-          const std::string display_name = display_name_node->value();
-          db.set_friendly_name(sess->user, utils::decode_url(display_name));
-        }
+    xmlNodePtr current_node = user_node->children, s_node = NULL;
+    while (current_node) {
+      if (xmlStrEqual(current_node->name,
+                      reinterpret_cast<const xmlChar*>("s"))) {
+        s_node = current_node->children;
+        while (s_node) {
+          if (xmlStrEqual(s_node->name,
+                          reinterpret_cast<const xmlChar*>("Status"))) {
+            xmlChar* status_val =
+                xmlNodeListGetString(doc, s_node->children, 1);
+            if (status_val) {
+              // TODO: avoid copy.
+              const std::string status = reinterpret_cast<char*>(status_val);
 
-        rapidxml::xml_node<char>* psm_node = s_node->first_node("PSM");
-        if (psm_node) {
-          const char* psm = psm_node->value();
-          db.set_status_message(sess->user, psm);
+              xmlFree(status_val);
+
+              db.set_status(sess->user, status);
+            }
+          } else if (xmlStrEqual(s_node->name,
+                                 reinterpret_cast<const xmlChar*>
+                                     ("FriendlyName"))) {
+            xmlChar* display_name_val =
+                xmlNodeListGetString(doc, s_node->children, 1);
+            if (display_name_val) {
+              // TODO: avoid copy.
+              const std::string display_name =
+                  reinterpret_cast<char*>(display_name_val);
+
+              xmlFree(display_name_val);
+
+              db.set_friendly_name(sess->user, utils::decode_url(display_name));
+            }
+          } else if (xmlStrEqual(s_node->name,
+                                 reinterpret_cast<const xmlChar*>("PSM"))) {
+            xmlChar* psm = xmlNodeListGetString(doc, s_node->children, 1);
+            db.set_status_message(sess->user, reinterpret_cast<char*>(psm));
+            if (psm)
+              xmlFree(psm);
+          }
+
+          s_node = s_node->next;
         }
       }
-      s_node = s_node->next_sibling("s");
+      current_node = current_node->next;
     }
+
+    xmlFreeDoc(doc);
   }
 }
 

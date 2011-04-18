@@ -99,7 +99,7 @@ bool MsnDatabase::set_friendly_name(const string& user, const string& name) {
 
 bool MsnDatabase::set_status_message(const string& user, const char* msg) {
   string sql("UPDATE users SET psm = '");
-  if (*msg != '\0')
+  if (msg != NULL)
     sql.append(db_.escape(msg));
   sql.append("'");
   sql.append(" WHERE username = '");
@@ -187,7 +187,7 @@ bool MsnDatabase::set_buddy_status_message(const string& user,
   string sql("UPDATE buddies "
              "JOIN users ON users.username = '" + user + "'");
   sql.append(" SET buddies.psm = '");
-  if (*msg != '\0')
+  if (msg != NULL)
     sql.append(db_.escape(msg));
   sql.append("'");
   sql.append(" WHERE user_id = users.id AND buddies.username = '");
