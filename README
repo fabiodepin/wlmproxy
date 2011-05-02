@@ -42,7 +42,7 @@ Build Requirements
  Libxml2
  Dolphin Connector >= 1.1
  OpenSSL
- Libevent >= 1.4.13
+ Libevent >= 2.0.10
 
 Building from git
 -----------------

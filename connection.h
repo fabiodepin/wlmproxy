@@ -19,6 +19,7 @@
 #include "chat_session.h"
 
 struct bufferevent;
+struct event_base;
 
 class Connection : private boost::noncopyable {
  public:
@@ -45,7 +46,7 @@ class Connection : private boost::noncopyable {
     bool warned;
   };
 
-  explicit Connection(int fd);
+  Connection(struct event_base* base, int fd);
   ~Connection();
 
   void start();
@@ -55,6 +56,7 @@ class Connection : private boost::noncopyable {
 
   struct bufferevent* client_bufev;
   struct bufferevent* server_bufev;
+  struct event_base* ev_base;
   uint32_t client_addr;
   uint32_t server_addr;
   uint16_t client_port;

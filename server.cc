@@ -18,15 +18,17 @@
 
 #include <linux/netfilter_ipv4.h>
 
-#include <event.h>
-#include <evutil.h>
+#include <event2/event.h>
+#include <event2/event_struct.h>
+#include <event2/util.h>
 
 #include "connection.h"
 #include "log.h"
 #include "utils.h"
 
-Server::Server(const char* address, int port)
-    : ev_(new struct event),
+Server::Server(struct event_base* base, const char* address, int port)
+    : base_(base),
+      ev_(new struct event),
       fd_(-1) {
   struct sockaddr_in sin;
   memset(&sin, 0, sizeof(sin));
@@ -50,7 +52,7 @@ Server::Server(const char* address, int port)
     err(1, "listen");
   }
 
-  event_set(ev_, fd_, EV_READ|EV_PERSIST, accept_cb, this);
+  event_assign(ev_, base_, fd_, EV_READ|EV_PERSIST, accept_cb, this);
   event_add(ev_, NULL);
 }
 
@@ -58,11 +60,12 @@ Server::~Server() {
   event_del(ev_);
   delete ev_;
   if (fd_ != -1)
-    EVUTIL_CLOSESOCKET(fd_);
+    evutil_closesocket(fd_);
 }
 
 // static
 void Server::accept_cb(int listen_fd, short event, void* arg) {
+  Server* server = static_cast<Server*>(arg);
   struct sockaddr_in client_sa;
   struct sockaddr_in server_sa;
   socklen_t slen;
@@ -81,7 +84,7 @@ void Server::accept_cb(int listen_fd, short event, void* arg) {
   if (evutil_make_socket_nonblocking(client_fd) < 0)
     return;
 
-  Connection* conn = new Connection(client_fd);
+  Connection* conn = new Connection(server->ev_base(), client_fd);
 
   slen = sizeof(server_sa);
   if (getsockopt(conn->client_fd, SOL_IP, SO_ORIGINAL_DST, &server_sa,

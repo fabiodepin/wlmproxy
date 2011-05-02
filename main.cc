@@ -22,7 +22,7 @@
 
 #include <openssl/crypto.h>
 #include <libxml/parser.h>
-#include <event.h>
+#include <event2/event.h>
 
 #include "connection.h"
 #include "server.h"
@@ -97,13 +97,15 @@ static void write_pid(const char* pid_file) {
 }
 
 static void signal_cb(int sig, short event, void* arg) {
+  struct event_base* base = static_cast<event_base*>(arg);
+
   switch (sig) {
   case SIGTERM:
   case SIGINT:
   case SIGHUP:
     log_info("ohhh nooooo mr. bill!");
     cleanup();
-    event_loopexit(NULL);
+    event_base_loopexit(base, NULL);
     break;
   }
 }
@@ -138,7 +140,9 @@ static void usage(const char* progname) {
 
 int main(int argc, char** argv) {
   struct event_base* base;
-  struct event ev_sighup, ev_sigint, ev_sigterm;
+  struct event* ev_sighup = NULL;
+  struct event* ev_sigint = NULL;
+  struct event* ev_sigterm = NULL;
   const char* listen_ip = "0.0.0.0";
   const char* username = NULL;
   const char* config_file = "wlmproxy.conf";
@@ -215,7 +219,7 @@ int main(int argc, char** argv) {
 
   log_init();
 
-  base = event_init();
+  base = event_base_new();
 
   setlocale(LC_ALL, "");
 
@@ -223,8 +227,8 @@ int main(int argc, char** argv) {
     errx(1, "config file '%s' not found", config_file);
 
   msn::msn_init();
-  acl_init();
-  word_filter_init();
+  acl_init(base);
+  word_filter_init(base);
 
   HistoryLogger* logger = HistoryLogger::instance();
 
@@ -233,22 +237,25 @@ int main(int argc, char** argv) {
 
   // Setup signal handler
   signal(SIGPIPE, SIG_IGN);
-  signal_set(&ev_sighup, SIGHUP, signal_cb, NULL);
-  signal_set(&ev_sigint, SIGINT, signal_cb, NULL);
-  signal_set(&ev_sigterm, SIGTERM, signal_cb, NULL);
-  signal_add(&ev_sighup, NULL);
-  signal_add(&ev_sigint, NULL);
-  signal_add(&ev_sigterm, NULL);
+  ev_sighup = evsignal_new(base, SIGHUP, signal_cb, base);
+  ev_sigint = evsignal_new(base, SIGINT, signal_cb, base);
+  ev_sigterm = evsignal_new(base, SIGTERM, signal_cb, base);
+  event_add(ev_sighup, NULL);
+  event_add(ev_sigint, NULL);
+  event_add(ev_sigterm, NULL);
 
-  Server* server = new Server(listen_ip, listen_port);
+  Server* server = new Server(base, listen_ip, listen_port);
 
   log_info("starting up on %s:%hu", listen_ip, listen_port);
 
-  event_dispatch();
+  event_base_dispatch(base);
 
   delete server;
 
   // Cleanup
+  event_free(ev_sighup);
+  event_free(ev_sigint);
+  event_free(ev_sigterm);
   event_base_free(base);
 
   // Shutdown

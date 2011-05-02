@@ -9,8 +9,8 @@
 #include <ctime>
 #include <cassert>
 
-#include <event.h>
-#include <evutil.h>
+#include <event2/event.h>
+#include <event2/util.h>
 
 #include "connection.h"
 #include "msn/msn.h"
@@ -26,15 +26,14 @@ ChatSession::ChatSession(const Connection* conn, const std::string& contact,
 }
 
 bool ChatSession::init() {
-  timeout_ = new event;
-  evtimer_set(timeout_, timeout_cb, this);
+  timeout_ = evtimer_new(conn_->ev_base, timeout_cb, this);
 
   return set_idle_timeout(60);  // TODO: hardcoded.
 }
 
 ChatSession::~ChatSession() {
   evtimer_del(timeout_);
-  delete timeout_;
+  event_free(timeout_);
 }
 
 bool ChatSession::set_idle_timeout(int seconds) {

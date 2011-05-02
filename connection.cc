@@ -10,8 +10,10 @@
 
 #include <set>
 
-#include <event.h>
-#include <evutil.h>
+#include <event2/event.h>
+#include <event2/bufferevent.h>
+#include <event2/buffer.h>
+#include <event2/util.h>
 
 #include "msn/msn.h"
 #include "log.h"
@@ -20,10 +22,11 @@ std::set<Connection*> connections;
 
 static uint32_t num_connections = 1;
 
-Connection::Connection(int fd)
+Connection::Connection(struct event_base* base, int fd)
     : session(new Session()),
       client_bufev(NULL),
       server_bufev(NULL),
+      ev_base(base),
       client_addr(0),
       server_addr(0),
       client_port(0),
@@ -42,14 +45,14 @@ Connection::~Connection() {
   log_info("destroying connection %u", id);
 
   if (client_bufev && client_fd != -1)
-    evbuffer_write(client_bufev->output, client_fd);
+    evbuffer_write(bufferevent_get_output(client_bufev), client_fd);
   if (server_bufev && server_fd != -1)
-    evbuffer_write(server_bufev->output, server_fd);
+    evbuffer_write(bufferevent_get_output(server_bufev), server_fd);
 
   if (client_fd != -1)
-    EVUTIL_CLOSESOCKET(client_fd);
+    evutil_closesocket(client_fd);
   if (server_fd != -1)
-    EVUTIL_CLOSESOCKET(server_fd);
+    evutil_closesocket(server_fd);
 
   if (client_bufev != NULL)
     bufferevent_free(client_bufev);
@@ -67,12 +70,14 @@ Connection::~Connection() {
 }
 
 void Connection::start() {
-  client_bufev = bufferevent_new(client_fd, client_read_cb, NULL,
-                                 client_error_cb, this);
+  client_bufev = bufferevent_socket_new(ev_base, client_fd,
+                                        BEV_OPT_CLOSE_ON_FREE);
+  bufferevent_setcb(client_bufev, client_read_cb, NULL, client_error_cb, this);
   bufferevent_enable(client_bufev, EV_READ);
 
-  server_bufev = bufferevent_new(server_fd, server_read_cb, NULL,
-                                 server_error_cb, this);
+  server_bufev = bufferevent_socket_new(ev_base, server_fd,
+                                        BEV_OPT_CLOSE_ON_FREE);
+  bufferevent_setcb(server_bufev, server_read_cb, NULL, server_error_cb, this);
   bufferevent_enable(server_bufev, EV_READ);
 }
 
@@ -84,11 +89,7 @@ void Connection::client_error_cb(struct bufferevent* bufev, short error,
 
   DLOG(2, "%s: called", __func__);
 
-  if (error & EVBUFFER_EOF) {
-    // connection has been closed, do any clean up here
-    done = true;
-  } else if (error & EVBUFFER_ERROR) {
-    // check errno to see what error occurred
+  if (error & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
     done = true;
   }
   if (done)
@@ -98,13 +99,13 @@ void Connection::client_error_cb(struct bufferevent* bufev, short error,
 // static
 void Connection::client_read_cb(struct bufferevent* bufev, void* arg) {
   Connection* conn = static_cast<Connection*>(arg);
-  struct evbuffer* input = EVBUFFER_INPUT(bufev);
+  struct evbuffer* input = bufferevent_get_input(bufev);
   size_t len;
 
   DLOG(2, "%s: called", __func__);
 
   while (1) {
-    len = EVBUFFER_LENGTH(input);
+    len = evbuffer_get_length(input);
     if (len <= 0)
       break;
 
@@ -121,11 +122,7 @@ void Connection::server_error_cb(struct bufferevent* bufev, short error,
 
   DLOG(2, "%s: called", __func__);
 
-  if (error & EVBUFFER_EOF) {
-    // connection has been closed, do any clean up here
-    done = true;
-  } else if (error & EVBUFFER_ERROR) {
-    // check errno to see what error occurred
+  if (error & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
     done = true;
   }
   if (done)
@@ -135,13 +132,13 @@ void Connection::server_error_cb(struct bufferevent* bufev, short error,
 // static
 void Connection::server_read_cb(struct bufferevent* bufev, void* arg) {
   Connection* conn = static_cast<Connection*>(arg);
-  struct evbuffer* input = EVBUFFER_INPUT(bufev);
+  struct evbuffer* input = bufferevent_get_input(bufev);
   size_t len;
 
   DLOG(2, "%s: called", __func__);
 
   while (1) {
-    len = EVBUFFER_LENGTH(input);
+    len = evbuffer_get_length(input);
     if (len <= 0)
       break;
 

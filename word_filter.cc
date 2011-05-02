@@ -17,8 +17,9 @@
 #include <boost/scoped_ptr.hpp>
 #include <dolphinconn/connection.h>
 #include <dolphinconn/resultset.h>
-#include <event.h>
-#include <evutil.h>
+#include <event2/event.h>
+#include <event2/event_struct.h>
+#include <event2/util.h>
 
 #include "tokenizer.h"
 #include "config.h"
@@ -94,10 +95,10 @@ static void reload_words(int fd, short event, void* arg) {
   patterns.swap(bar);
 }
 
-void word_filter_init() {
+void word_filter_init(struct event_base* base) {
   struct timeval tv;
 
-  evtimer_set(&ev_timeout, reload_words, NULL);
+  evtimer_assign(&ev_timeout, base, reload_words, NULL);
   evutil_timerclear(&tv);
   tv.tv_sec = 300;  // TODO: hardcoded.
   event_add(&ev_timeout, &tv);

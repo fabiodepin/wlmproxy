@@ -14,8 +14,9 @@
 #include <boost/scoped_ptr.hpp>
 #include <dolphinconn/connection.h>
 #include <dolphinconn/resultset.h>
-#include <event.h>
-#include <evutil.h>
+#include <event2/event.h>
+#include <event2/event_struct.h>
+#include <event2/util.h>
 
 #include "config.h"
 #include "utils.h"
@@ -80,10 +81,10 @@ static void refresh_acl(int fd, short event, void* arg) {
   cache.clear();
 }
 
-void acl_init() {
+void acl_init(struct event_base* base) {
   struct timeval tv;
 
-  evtimer_set(&ev_refresh, refresh_acl, NULL);
+  evtimer_assign(&ev_refresh, base, refresh_acl, NULL);
   evutil_timerclear(&tv);
   tv.tv_sec = 120;  // TODO: hardcoded.
   event_add(&ev_refresh, &tv);

@@ -6,8 +6,7 @@
 6) Doxygenify code
 7) Add interoperability support for Yahoo! and Facebook Chat
 8) Add ability to filter Live Messenger 2011 offline messages
-9) Update to libevent2
-10) Add systemd unit
+9) Add systemd unit
 
 ---
-29 April 2011
+01 May 2011

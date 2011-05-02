@@ -10,7 +10,9 @@
 
 #include <string>
 
-void word_filter_init();
+struct event_base;
+
+void word_filter_init(struct event_base* base);
 bool word_filter_check(const std::string& str);
 
 #endif // WORD_FILTER_H_
