@@ -1,1 +1,1 @@
-OPTS="-u wlmproxy -F /var/run/wlmproxy.pid"
+OPTS="-u wlmproxy -F /var/run/wlmproxy/wlmproxy.pid"
