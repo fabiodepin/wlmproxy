@@ -1380,7 +1380,8 @@ int parse_packet(bool inbound, struct evbuffer* input, Connection* conn) {
 
   bool done = false;
   if (!cmd->is_chunked()) {
-    char* linebreak = strstr(const_cast<char*>(buf), "\r\n");
+    char* linebreak = reinterpret_cast<char*>(evbuffer_find(
+        input, reinterpret_cast<const u_char*>("\r\n"), 2));
 
     if (linebreak == NULL) {  // no CRLF found
       DLOG(1, " -- ignoring line without crlf");
