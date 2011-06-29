@@ -1,3 +1,7 @@
+Changes in 0.1.3 (29 Jun 2011):
+ * Fix pid path. (01d65df)
+ * Replace strstr by evbuffer_find (refs #6). (23cbe2a)
+
 Changes in 0.1.2 (17 Apr 2011):
  * Replace the XML parser. (0ab8c64)
 
