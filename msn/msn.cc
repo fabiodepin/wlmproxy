@@ -1456,7 +1456,7 @@ int parse_packet(bool inbound, struct evbuffer* input, Connection* conn) {
     if (show_payload && cmd->payload.size() > 0) {
       const std::string escaped(
           utils::escape_payload(cmd->payload, cmd->payload.size()));
-      fprintf(stdout, "\n======\n%s\n======\n", escaped.c_str());
+      fprintf(stderr, "\n======\n%s\n======\n", escaped.c_str());
     }
 
     parse_cmd(cmd);
