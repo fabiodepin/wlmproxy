@@ -470,15 +470,16 @@ void hack(Command* cmd, const std::string& mime) {
     string_map header_map = parse_headers(mime);
 
     const std::string& to = header_map["To"];
-    // Check for multiparty chat.
+    const std::string& from = header_map["From"];
     if (to[0] == '9' ||
-        to.compare(0, 2, "10") == 0) {
+        (to.compare(0, 2, "10") == 0) ||
+        (to.compare(0, 2, "13") == 0) ||
+        (from.compare(0, 2, "13") == 0)) {
       delete cmd->hist;
       cmd->hist = NULL;
 
       return;
     }
-    const std::string& from = header_map["From"];
 
     std::string buddy = cmd->is_inbound() ? from : to;
     size_t pos = buddy.find_first_of(':');
